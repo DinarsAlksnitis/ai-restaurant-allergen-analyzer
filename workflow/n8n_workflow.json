@@ -1,0 +1,469 @@
+{
+  "name": "n8n_workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -16
+      ],
+      "id": "7479ed3d-3c16-4935-89ee-aacdae700495",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "url": "https://www.liveriga.com/lv/7981-rigas-restoranu-nedela-1/",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        224,
+        -16
+      ],
+      "id": "1da9095b-802e-411a-b6c5-9146757a81f4",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = items[0].json.data;\nconst restaurants = [];\n\nconst strip = (str) => str.replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim();\n\nconst blockRegex = /class=\"background-white spacer-mb-16[^\"]*\">([\\s\\S]*?)class=\"display-flex display-md-none/g;\nlet blockMatch;\n\nwhile ((blockMatch = blockRegex.exec(html)) !== null) {\n  const block = blockMatch[1];\n\n  const nameMatch = block.match(/display-none display-md-block[^>]*>([\\s\\S]*?)<\\/h3>/);\n  const name = nameMatch ? strip(nameMatch[1]) : '';\n\n  const priceMatch = block.match(/color-pink-500[^>]*>([\\s\\S]*?)<\\/div>/);\n  const price = priceMatch ? strip(priceMatch[1]) : '';\n\n  const phoneMatch = block.match(/href=\"tel:[^\"]*\"[\\s\\S]*?<span>([^<]+)<\\/span>/);\n  const phone = phoneMatch ? phoneMatch[1].trim() : '';\n\n  const menuMatch = block.match(/class=\"typography tight-typography\">([\\s\\S]*?)<\\/div>/);\n  const menuHtml = menuMatch ? menuMatch[1] : '';\n\n  const extractCourse = (html, label) => {\n    const escaped = label.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\n    const stopPattern = '(?=<strong>(?:Uzkoda|Pamatēdiens|Deserts|Piezīmes)<\\\\/strong>|$)';\n\n    const re = new RegExp(\n      '<strong>' + escaped + '<\\\\/strong>' +\n      '(?:<\\\\/p>[\\\\s\\\\S]*?<p>|<br\\\\s*\\\\/?>|\\\\n)' +\n      '([\\\\s\\\\S]*?)' +\n      stopPattern\n    );\n\n    const m = html.match(re);\n    if (!m) return '';\n    return strip(m[1]).replace(/\\bvai\\b/g, ' | ');\n  };\n\n  const uzkoda = extractCourse(menuHtml, 'Uzkoda');\n  const pamatEdiens = extractCourse(menuHtml, 'Pamatēdiens');\n  const deserts = extractCourse(menuHtml, 'Deserts');\n\n  if (name) {\n    restaurants.push({ json: { name, price, phone, uzkoda, pamatEdiens, deserts } });\n  }\n}\n\nreturn restaurants.length > 0 ? restaurants : [{ json: { error: 'No restaurants found' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        -16
+      ],
+      "id": "58e0bb95-bca3-42f0-8c24-27e4ebbe25bc",
+      "name": "Parsing HTML"
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = [];\n\nfor (const item of items) {\n  const { name, price, phone, uzkoda, pamatEdiens, deserts } = item.json;\n\n  const starters = uzkoda ? uzkoda.split(' | ').map(s => s.trim()).filter(Boolean) : [''];\n  const mains = pamatEdiens ? pamatEdiens.split(' | ').map(s => s.trim()).filter(Boolean) : [''];\n  const dessertList = deserts ? deserts.split(' | ').map(s => s.trim()).filter(Boolean) : [''];\n\n  for (const starter of starters) {\n    for (const main of mains) {\n      for (const dessert of dessertList) {\n        results.push({\n          json: {\n            restaurant: name,\n            price,\n            phone,\n            starter,\n            main,\n            dessert\n          }\n        });\n      }\n    }\n  }\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        -16
+      ],
+      "id": "ac12d4cc-68d3-4d79-84c8-65360c32762c",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = [];\n\nfor (const item of items) {\n  // Get the AI response text (adjust path based on your AI node)\n  const aiText = item.json.message?.content || \n                 item.json.choices?.[0]?.message?.content || \n                 item.json.text || '';\n\n  let allergens = {};\n  try {\n    // Strip any accidental markdown backticks\n    const clean = aiText.replace(/```json|```/g, '').trim();\n    allergens = JSON.parse(clean);\n  } catch(e) {\n    // Fallback: all unknown\n    allergens = {\n      vegetarian:0, gluten:0, crustaceans:0, eggs:0, fish:0, peanuts:0,\n      soy:0, milk:0, nuts:0, celery:0, mustard:0,\n      sesame:0, sulphites:0, lupin:0, molluscs:0\n    };\n  }\n\n  results.push({\n    json: {\n      ...item.json,\n      ...allergens\n    }\n  });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        -16
+      ],
+      "id": "f4e01904-d45e-4132-ba51-112b0e1e927a",
+      "name": "Parse JSON response"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=Analyze this meal for EU allergens. As well as if it contains meat ( is vegetarian or not )\n\nRestaurant: {{ $json.restaurant }}\nStarter: {{ $json.starter }}\nMain: {{ $json.main }}\nDessert: {{ $json.dessert }}\n\nReturn only this JSON with 1 or 0, no extra text:\n{\n  \"vegetarian\": 0\n  \"gluten\": 0,\n  \"crustaceans\": 0,\n  \"eggs\": 0,\n  \"fish\": 0,\n  \"peanuts\": 0,\n  \"soy\": 0,\n  \"milk\": 0,\n  \"nuts\": 0,\n  \"celery\": 0,\n  \"mustard\": 0,\n  \"sesame\": 0,\n  \"sulphites\": 0,\n  \"lupin\": 0,\n  \"molluscs\": 0\n}"
+            },
+            {
+              "role": "system",
+              "content": "You are a food allergen expert. Analyze meals for EU 14 allergens. As well as if the meal is for vegetarians.\nReturn only valid JSON with 1 for present and 0 for not present. \nNo markdown, no explanation."
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        1120,
+        -16
+      ],
+      "id": "0663d0ee-1aaa-4567-8e58-9a6c21ca1304",
+      "name": "Message a model",
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_ID",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "function safeParseJson(text) {\n  if (typeof text !== 'string') return null;\n\n  let cleaned = text.trim();\n\n  // remove ```json ... ``` if present\n  cleaned = cleaned\n    .replace(/^```json\\s*/i, '')\n    .replace(/^```\\s*/i, '')\n    .replace(/\\s*```$/i, '');\n\n  try {\n    return JSON.parse(cleaned);\n  } catch (error) {\n    return null;\n  }\n}\n\nconst allergenKeys = [\n  'vegetarian',\n  'gluten',\n  'crustaceans',\n  'eggs',\n  'fish',\n  'peanuts',\n  'soy',\n  'milk',\n  'nuts',\n  'celery',\n  'mustard',\n  'sesame',\n  'sulphites',\n  'lupin',\n  'molluscs'\n];\n\nconst originalItems = $('Parse JSON response').all();\nconst aiItems = $input.all();\n\nreturn aiItems.map((item, index) => {\n  const original = originalItems[index]?.json || {};\n\n  const responseText =\n    item.json.output?.[0]?.content?.[0]?.text ||\n    item.json.message?.content ||\n    item.json.choices?.[0]?.message?.content ||\n    item.json.text ||\n    '';\n\n  const parsed = safeParseJson(responseText) || {};\n\n  const normalized = {};\n  for (const key of allergenKeys) {\n    normalized[key] = parsed[key] ?? 0;\n  }\n\n  return {\n    json: {\n      ...original,\n      ...normalized\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1472,
+        -16
+      ],
+      "id": "bf570091-3d9c-4914-8006-e4b3b3a5438e",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1Heo2pD7ybCickZa7F66eU20I61mzVmPC0rZhYaNf9Bg",
+          "mode": "list",
+          "cachedResultName": "Restaurant week with vegetarian option",
+          "cachedResultUrl": "YOUR_URL"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Lapa1",
+          "cachedResultUrl": "YOUR_URL"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "molluscs": "={{ $json.molluscs }}",
+            "lupin": "={{ $json.lupin }}",
+            "sulphites": "={{ $json.sulphites }}",
+            "sesame": "={{ $json.sesame }}",
+            "mustard": "={{ $json.mustard }}",
+            "celery": "={{ $json.celery }}",
+            "nuts": "={{ $json.nuts }}",
+            "milk": "={{ $json.milk }}",
+            "soy": "={{ $json.soy }}",
+            "peanuts": "={{ $json.peanuts }}",
+            "fish": "={{ $json.fish }}",
+            "eggs": "={{ $json.eggs }}",
+            "crustaceans": "={{ $json.crustaceans }}",
+            "gluten": "={{ $json.gluten }}",
+            "vegetarian": "={{ $json.vegetarian }}",
+            "Deserts": "={{ $json.dessert }}",
+            "Pamatēdiens": "={{ $json.main }}",
+            "Uzkodas": "={{ $json.starter }}",
+            "Phone": "={{ $json.phone }}",
+            "Price": "={{ $json.price }}",
+            "Name": "={{ $json.restaurant }}"
+          },
+          "matchingColumns": [
+            "Name"
+          ],
+          "schema": [
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Price",
+              "displayName": "Price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Uzkodas",
+              "displayName": "Uzkodas",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Pamatēdiens",
+              "displayName": "Pamatēdiens",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Deserts",
+              "displayName": "Deserts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "vegetarian",
+              "displayName": "vegetarian",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "gluten",
+              "displayName": "gluten",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "crustaceans",
+              "displayName": "crustaceans",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "eggs",
+              "displayName": "eggs",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "fish",
+              "displayName": "fish",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "peanuts",
+              "displayName": "peanuts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "soy",
+              "displayName": "soy",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "milk",
+              "displayName": "milk",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "nuts",
+              "displayName": "nuts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "celery",
+              "displayName": "celery",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "mustard",
+              "displayName": "mustard",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "sesame",
+              "displayName": "sesame",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "sulphites",
+              "displayName": "sulphites",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "lupin",
+              "displayName": "lupin",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "molluscs",
+              "displayName": "molluscs",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1696,
+        -16
+      ],
+      "id": "2ceb53be-b578-44c8-b3e5-c1941a7a025c",
+      "name": "Append or update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Parsing HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsing HTML": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Parse JSON response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse JSON response": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Append or update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "9ee97a78-069e-4a69-95a6-f6d8d1d0106e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "bedfee9bad0d35e5a2fb39cef460edd1d84113735d7c0261725b3e54819fb1b9"
+  },
+  "id": "ajqUB3Z8OXPczkBD",
+  "tags": []
+}
