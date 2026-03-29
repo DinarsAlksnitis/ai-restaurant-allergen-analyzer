@@ -29,7 +29,7 @@ This project automates the extraction and analysis of restaurant menus from Riga
 
 ## Application Preview
 
-![Lovable App Screenshot](docs/lovable-app.png)
+![Lovable App Screenshot](docs/lovable_app.png)
 
 ---
 
