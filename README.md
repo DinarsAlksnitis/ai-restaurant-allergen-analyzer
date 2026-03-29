@@ -4,6 +4,13 @@
 
 This project automates the extraction and analysis of restaurant menus from Riga Restaurant Week using AI. It identifies EU allergens and determines whether meals are vegetarian.
 
+## Disclaimer
+
+- The allergen detection and vegetarian classification in this project are performed using AI and may not be fully accurate.  
+- This project is experimental in nature, and AI-generated results can contain errors or misclassifications.  
+- I do not assume any liability for incorrect labeling of allergens or dietary categories.  
+- The data was scraped on **29th March 2026** and includes only restaurants that had published menus at that time.  
+
 ---
 
 ## Features
